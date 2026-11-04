@@ -15,15 +15,24 @@ class SaveSystemTests(unittest.TestCase):
         self.temporary_directory.cleanup()
 
     def test_progress_round_trip_and_clear(self) -> None:
-        self.saves.save_progress(score=240, lives=1, elapsed_seconds=27)
+        self.saves.save_progress(score=240, lives=1, elapsed_seconds=27, difficulty="hard")
         self.assertEqual(
             self.saves.load_progress(),
-            {"score": 240, "lives": 1, "elapsed_seconds": 27},
+            {"score": 240, "lives": 1, "elapsed_seconds": 27, "difficulty": "hard"},
         )
         self.assertTrue(self.saves.has_progress())
 
         self.saves.clear_progress()
         self.assertIsNone(self.saves.load_progress())
+
+    def test_old_progress_defaults_to_normal_mode(self) -> None:
+        self.directory.mkdir(parents=True, exist_ok=True)
+        (self.directory / "progress.json").write_text(
+            '{"score": 30, "lives": 2, "elapsed_seconds": 8}',
+            encoding="utf-8",
+        )
+
+        self.assertEqual(self.saves.load_progress()["difficulty"], "normal")
 
     def test_ranking_is_sorted_sanitized_and_limited(self) -> None:
         for index in range(14):

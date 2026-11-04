@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 import random
 
 import pygame
@@ -20,6 +21,7 @@ from game.config import (
 )
 
 
+@lru_cache(maxsize=1)
 def build_background() -> pygame.Surface:
     surface = pygame.Surface((WIDTH, HEIGHT))
     top = DARK
@@ -39,42 +41,89 @@ def build_background() -> pygame.Surface:
     return surface
 
 
+@lru_cache(maxsize=1)
 def ship_surface() -> pygame.Surface:
-    surface = pygame.Surface((58, 40), pygame.SRCALPHA)
-    pygame.draw.polygon(surface, (33, 55, 91), [(5, 4), (54, 20), (5, 36), (16, 20)])
-    pygame.draw.polygon(surface, CYAN, [(11, 8), (47, 20), (11, 32), (21, 20)], 3)
-    pygame.draw.circle(surface, (230, 251, 255), (31, 20), 5)
-    pygame.draw.polygon(surface, ORANGE, [(7, 14), (0, 20), (7, 26)])
+    """Return the player's detailed twin-engine interceptor."""
+
+    surface = pygame.Surface((72, 50), pygame.SRCALPHA)
+    pygame.draw.ellipse(surface, (*CYAN, 42), (10, 7, 58, 36))
+
+    # Engine flames and nozzles.
+    pygame.draw.polygon(surface, (*ORANGE, 100), [(16, 14), (0, 19), (16, 23)])
+    pygame.draw.polygon(surface, (*ORANGE, 100), [(16, 28), (0, 33), (16, 37)])
+    pygame.draw.polygon(surface, (255, 209, 92), [(14, 16), (5, 19), (14, 21)])
+    pygame.draw.polygon(surface, (255, 209, 92), [(14, 30), (5, 33), (14, 35)])
+    pygame.draw.rect(surface, (20, 38, 69), (13, 13, 10, 10), border_radius=3)
+    pygame.draw.rect(surface, (20, 38, 69), (13, 27, 10, 10), border_radius=3)
+
+    # Wings, armored hull, outline, and cockpit.
+    pygame.draw.polygon(surface, (24, 43, 78), [(18, 16), (10, 2), (45, 17), (53, 25), (45, 33), (10, 48), (18, 34)])
+    pygame.draw.polygon(surface, (41, 69, 111), [(18, 9), (68, 25), (18, 41), (29, 25)])
+    pygame.draw.polygon(surface, CYAN, [(23, 12), (64, 25), (23, 38), (33, 25)], 3)
+    pygame.draw.line(surface, BLUE, (21, 17), (43, 21), 2)
+    pygame.draw.line(surface, BLUE, (21, 33), (43, 29), 2)
+    pygame.draw.ellipse(surface, (8, 24, 51), (39, 17, 17, 16))
+    pygame.draw.ellipse(surface, (151, 245, 255), (42, 19, 11, 11))
+    pygame.draw.ellipse(surface, (245, 254, 255), (44, 20, 5, 4))
+    pygame.draw.circle(surface, (112, 151, 203), (25, 25), 3)
     return surface
 
 
+@lru_cache(maxsize=2)
 def enemy_surface(kind: str) -> pygame.Surface:
-    color = MAGENTA if kind == "striker" else ORANGE
-    surface = pygame.Surface((48, 38), pygame.SRCALPHA)
-    pygame.draw.polygon(surface, (39, 31, 64), [(45, 4), (7, 9), (1, 19), (7, 29), (45, 34), (34, 19)])
-    pygame.draw.polygon(surface, color, [(40, 8), (12, 12), (7, 19), (12, 26), (40, 30), (31, 19)], 3)
-    pygame.draw.circle(surface, (245, 248, 255), (19, 19), 4)
+    """Draw visually distinct scout and striker ships."""
+
+    if kind == "striker":
+        surface = pygame.Surface((62, 48), pygame.SRCALPHA)
+        pygame.draw.ellipse(surface, (*MAGENTA, 35), (2, 5, 56, 38))
+        pygame.draw.polygon(surface, (47, 27, 73), [(59, 4), (28, 10), (6, 1), (13, 17), (2, 24), (13, 31), (6, 47), (28, 38), (59, 44), (43, 24)])
+        pygame.draw.polygon(surface, MAGENTA, [(54, 9), (28, 15), (13, 9), (19, 21), (8, 24), (19, 27), (13, 39), (28, 33), (54, 39), (38, 24)], 3)
+        pygame.draw.circle(surface, (255, 226, 248), (29, 24), 6)
+        pygame.draw.circle(surface, (119, 28, 98), (29, 24), 3)
+        pygame.draw.line(surface, (255, 150, 220), (42, 16), (52, 12), 2)
+        pygame.draw.line(surface, (255, 150, 220), (42, 32), (52, 36), 2)
+        return surface
+
+    surface = pygame.Surface((54, 42), pygame.SRCALPHA)
+    pygame.draw.ellipse(surface, (*ORANGE, 32), (3, 4, 47, 34))
+    pygame.draw.polygon(surface, (48, 38, 61), [(51, 5), (17, 9), (3, 21), (17, 33), (51, 37), (39, 21)])
+    pygame.draw.polygon(surface, ORANGE, [(46, 10), (20, 13), (9, 21), (20, 29), (46, 32), (34, 21)], 3)
+    pygame.draw.circle(surface, (255, 246, 219), (22, 21), 5)
+    pygame.draw.circle(surface, (120, 64, 27), (22, 21), 2)
+    pygame.draw.line(surface, (255, 204, 122), (35, 15), (44, 13), 2)
+    pygame.draw.line(surface, (255, 204, 122), (35, 27), (44, 29), 2)
     return surface
 
 
+@lru_cache(maxsize=1)
 def boss_surface() -> pygame.Surface:
-    surface = pygame.Surface((128, 94), pygame.SRCALPHA)
+    surface = pygame.Surface((150, 108), pygame.SRCALPHA)
+    pygame.draw.ellipse(surface, (*MAGENTA, 30), (4, 5, 141, 98))
     pygame.draw.polygon(
         surface,
         (45, 26, 73),
-        [(123, 8), (47, 3), (8, 24), (2, 47), (8, 70), (47, 91), (123, 86), (99, 47)],
+        [(145, 8), (60, 3), (20, 18), (3, 54), (20, 90), (60, 105), (145, 100), (116, 54)],
     )
     pygame.draw.polygon(
         surface,
         VIOLET,
-        [(117, 15), (52, 10), (16, 28), (10, 47), (16, 66), (52, 84), (117, 79), (91, 47)],
+        [(138, 16), (64, 11), (28, 25), (12, 54), (28, 83), (64, 97), (138, 92), (105, 54)],
         4,
     )
-    pygame.draw.circle(surface, MAGENTA, (65, 47), 17)
-    pygame.draw.circle(surface, (245, 250, 255), (65, 47), 7)
+    pygame.draw.polygon(surface, (75, 38, 101), [(48, 22), (84, 15), (111, 33), (98, 54), (111, 75), (84, 93), (48, 86), (61, 54)])
+    pygame.draw.line(surface, (213, 148, 255), (27, 35), (55, 30), 3)
+    pygame.draw.line(surface, (213, 148, 255), (27, 73), (55, 78), 3)
+    pygame.draw.circle(surface, MAGENTA, (82, 54), 20)
+    pygame.draw.circle(surface, (96, 26, 112), (82, 54), 13)
+    pygame.draw.circle(surface, (245, 250, 255), (82, 54), 7)
+    pygame.draw.circle(surface, (255, 178, 229), (80, 51), 3)
+    for y in (24, 43, 65, 84):
+        pygame.draw.rect(surface, (21, 24, 55), (121, y - 4, 17, 8), border_radius=3)
+        pygame.draw.line(surface, MAGENTA, (123, y), (136, y), 2)
     return surface
 
 
+@lru_cache(maxsize=2)
 def powerup_surface(kind: str) -> pygame.Surface:
     color = GREEN if kind == "repair" else CYAN
     surface = pygame.Surface((32, 32), pygame.SRCALPHA)
@@ -88,11 +137,56 @@ def powerup_surface(kind: str) -> pygame.Surface:
     return surface
 
 
-def projectile_surface(friendly: bool) -> pygame.Surface:
-    surface = pygame.Surface((18, 8), pygame.SRCALPHA)
-    color = CYAN if friendly else MAGENTA
-    pygame.draw.ellipse(surface, color, (0, 1, 18, 6))
-    pygame.draw.ellipse(surface, (245, 252, 255), (10 if friendly else 2, 2, 6, 4))
+@lru_cache(maxsize=4)
+def projectile_surface(friendly: bool, boss_shot: bool = False) -> pygame.Surface:
+    if friendly:
+        surface = pygame.Surface((30, 12), pygame.SRCALPHA)
+        pygame.draw.ellipse(surface, (*CYAN, 48), (0, 0, 30, 12))
+        pygame.draw.polygon(surface, (37, 145, 222), [(0, 6), (20, 2), (29, 6), (20, 10)])
+        pygame.draw.ellipse(surface, (238, 254, 255), (14, 3, 14, 6))
+        pygame.draw.line(surface, CYAN, (2, 6), (17, 6), 2)
+        return surface
+
+    size = (28, 16) if boss_shot else (22, 12)
+    surface = pygame.Surface(size, pygame.SRCALPHA)
+    pygame.draw.ellipse(surface, (*MAGENTA, 55), surface.get_rect())
+    pygame.draw.ellipse(surface, MAGENTA, surface.get_rect().inflate(-4, -4))
+    core_x = 7 if boss_shot else 5
+    pygame.draw.circle(surface, (255, 238, 250), (core_x, size[1] // 2), 3)
+    pygame.draw.line(surface, (180, 45, 144), (core_x + 3, size[1] // 2), (size[0] - 2, size[1] // 2), 2)
+    return surface
+
+
+@lru_cache(maxsize=2)
+def heart_surface(filled: bool) -> pygame.Surface:
+    """Return a polished HUD heart without allocating every frame."""
+
+    surface = pygame.Surface((31, 28), pygame.SRCALPHA)
+    glow_color = (*MAGENTA, 42) if filled else (88, 98, 118, 24)
+    pygame.draw.circle(surface, glow_color, (10, 10), 10)
+    pygame.draw.circle(surface, glow_color, (21, 10), 10)
+    pygame.draw.polygon(surface, glow_color, [(2, 10), (29, 10), (15, 27)])
+    base = (255, 67, 105) if filled else (54, 65, 86)
+    edge = (255, 174, 194) if filled else (92, 104, 126)
+    pygame.draw.circle(surface, base, (10, 9), 8)
+    pygame.draw.circle(surface, base, (21, 9), 8)
+    pygame.draw.polygon(surface, base, [(2, 10), (29, 10), (15, 26)])
+    pygame.draw.lines(surface, edge, False, [(4, 8), (8, 3), (14, 5)], 2)
+    if filled:
+        pygame.draw.circle(surface, (255, 226, 234), (8, 6), 3)
+        pygame.draw.line(surface, (196, 38, 78), (15, 22), (25, 10), 2)
+    return surface
+
+
+@lru_cache(maxsize=2)
+def power_aura_surface(kind: str) -> pygame.Surface:
+    """Cache the player's shield/turbo aura to avoid frame-time allocations."""
+
+    color = GREEN if kind == "shield" else CYAN
+    surface = pygame.Surface((92, 70), pygame.SRCALPHA)
+    pygame.draw.ellipse(surface, (*color, 32), (3, 3, 86, 64))
+    pygame.draw.ellipse(surface, (*color, 105), (6, 6, 80, 58), 3)
+    pygame.draw.ellipse(surface, (235, 255, 255, 50), (11, 10, 70, 48), 1)
     return surface
 
 

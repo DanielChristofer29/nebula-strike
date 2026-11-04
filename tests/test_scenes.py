@@ -10,7 +10,8 @@ import pygame
 
 from game.audio import ProceduralAudio
 from game.config import HEIGHT, WIDTH
-from game.scenes import GameScene, MenuScene
+from game.entities import Enemy
+from game.scenes import DifficultyScene, GameScene, MenuScene
 from game.storage import SaveSystem
 
 
@@ -50,6 +51,27 @@ class SceneSmokeTests(unittest.TestCase):
         self.assertEqual(scene.score, 120)
         self.assertEqual(scene.player.lives, 1)
         self.assertEqual(scene.elapsed_offset, 23)
+        self.assertEqual(scene.difficulty.key, "normal")
+
+    def test_difficulty_selection_renders(self) -> None:
+        scene = DifficultyScene(self.screen, self.audio)
+        scene.draw()
+
+        self.assertEqual(len(scene.buttons), 3)
+        self.assertGreater(self.screen.get_bounding_rect().width, 0)
+
+    def test_hard_mode_spawns_more_enemies(self) -> None:
+        easy = GameScene(self.screen, self.audio, seed=29, difficulty="easy")
+        hard = GameScene(self.screen, self.audio, seed=29, difficulty="hard")
+        easy.elapsed_seconds = 24
+        hard.elapsed_seconds = 24
+
+        for now_ms in range(1_000, 15_000, 1_000):
+            easy._spawn_enemies(now_ms)
+            hard._spawn_enemies(now_ms)
+
+        self.assertEqual(len(easy.enemies), 2)
+        self.assertEqual(len(hard.enemies), 6)
 
     def test_close_event_exits_menu(self) -> None:
         pygame.event.post(pygame.event.Event(pygame.QUIT))
@@ -66,6 +88,33 @@ class SceneSmokeTests(unittest.TestCase):
         scene.session_started_at = 0
         scene.update(0.016, 30_100)
         self.assertIsNotNone(scene.boss)
+
+    def test_hard_mode_builds_reinforced_boss(self) -> None:
+        scene = GameScene(self.screen, self.audio, seed=29, difficulty="hard")
+        scene.session_started_at = 0
+        scene.update(0.016, 30_100)
+
+        self.assertIsNotNone(scene.boss)
+        self.assertEqual(scene.boss.max_hp, 48)
+        self.assertEqual(scene.result()["difficulty"], "hard")
+
+    def test_hard_mode_caps_enemy_projectiles(self) -> None:
+        scene = GameScene(self.screen, self.audio, seed=29, difficulty="hard")
+        scene.session_started_at = 90_000
+        scene.enemies = [Enemy("striker", scene.rng) for _ in range(10)]
+        for index, enemy in enumerate(scene.enemies):
+            enemy.position.update(780, 80 + index * 32)
+            enemy.last_shot_at = 0
+            enemy.shot_interval_ms = 350
+            enemy.sync_rect()
+
+        for now_ms in range(100_000, 118_001, 2_000):
+            scene.update(0.0, now_ms)
+
+        self.assertLessEqual(
+            len(scene.enemy_shots),
+            scene.difficulty.max_enemy_projectiles,
+        )
 
 
 if __name__ == "__main__":

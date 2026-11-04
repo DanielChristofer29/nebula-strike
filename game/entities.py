@@ -13,6 +13,7 @@ from game.config import HEIGHT, PLAYER_INVULNERABLE_MS, WIDTH
 from game.visuals import (
     boss_surface,
     enemy_surface,
+    power_aura_surface,
     powerup_surface,
     projectile_surface,
     ship_surface,
@@ -103,30 +104,44 @@ class Player(Entity):
         if now_ms < self.invulnerable_until and (now_ms // 90) % 2:
             return
         if self.powerup_type:
-            color = (82, 224, 151, 92) if self.powerup_type == "shield" else (62, 225, 255, 78)
-            glow = pygame.Surface((76, 58), pygame.SRCALPHA)
-            pygame.draw.ellipse(glow, color, glow.get_rect(), 3)
-            surface.blit(glow, (self.rect.x - 9, self.rect.y - 9))
+            aura = power_aura_surface(self.powerup_type)
+            surface.blit(aura, aura.get_rect(center=self.rect.center))
         super().draw(surface)
 
 
 class Enemy(Entity):
-    def __init__(self, kind: str = "scout", rng: random.Random | None = None):
+    def __init__(
+        self,
+        kind: str = "scout",
+        rng: random.Random | None = None,
+        *,
+        speed_multiplier: float = 1.0,
+        shot_interval_multiplier: float = 1.0,
+        progression_seconds: float = 110.0,
+    ):
         self.kind = kind if kind in {"scout", "striker"} else "scout"
         generator = rng or random
         super().__init__(
             enemy_surface(self.kind),
             (generator.uniform(WIDTH + 30, WIDTH + 260), generator.uniform(50, HEIGHT - 90)),
         )
-        self.speed = generator.uniform(125, 170) * (1.22 if self.kind == "striker" else 1.0)
+        self.speed = (
+            generator.uniform(125, 170)
+            * (1.22 if self.kind == "striker" else 1.0)
+            * max(0.25, speed_multiplier)
+        )
         self.hp = 2 if self.kind == "striker" else 1
         self.points = 25 if self.kind == "striker" else 10
         self.phase = generator.uniform(0, math.tau)
-        self.shot_interval_ms = generator.randint(1_500, 2_900)
+        self.progression_seconds = max(30.0, progression_seconds)
+        self.shot_interval_ms = max(
+            350,
+            round(generator.randint(1_500, 2_900) * max(0.25, shot_interval_multiplier)),
+        )
         self.last_shot_at = generator.randint(-1_000, 0)
 
     def update(self, dt: float, elapsed_seconds: float = 0.0) -> None:
-        difficulty_multiplier = min(1.75, 1.0 + elapsed_seconds / 110)
+        difficulty_multiplier = min(1.75, 1.0 + elapsed_seconds / self.progression_seconds)
         self.position.x -= self.speed * difficulty_multiplier * dt
         self.phase += dt * (2.6 if self.kind == "striker" else 1.8)
         self.position.y += math.sin(self.phase) * (55 if self.kind == "striker" else 28) * dt
@@ -151,11 +166,19 @@ class Enemy(Entity):
 class Boss(Entity):
     MAX_HP = 36
 
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        max_hp: int = MAX_HP,
+        vertical_speed: float = 126.0,
+        shot_interval_ms: int = 820,
+    ):
         image = boss_surface()
         super().__init__(image, (WIDTH - image.get_width() - 34, HEIGHT / 2 - image.get_height() / 2))
-        self.hp = self.MAX_HP
-        self.vertical_speed = 126.0
+        self.max_hp = max(1, int(max_hp))
+        self.hp = self.max_hp
+        self.vertical_speed = max(40.0, float(vertical_speed))
+        self.shot_interval_ms = max(250, int(shot_interval_ms))
         self.last_shot_at = 0
 
     def update(self, dt: float) -> None:
@@ -170,7 +193,7 @@ class Boss(Entity):
         self.sync_rect()
 
     def ready_to_shoot(self, now_ms: int) -> bool:
-        if now_ms - self.last_shot_at < 820:
+        if now_ms - self.last_shot_at < self.shot_interval_ms:
             return False
         self.last_shot_at = now_ms
         return True
@@ -189,7 +212,7 @@ class Projectile(Entity):
         damage: int = 1,
         boss_shot: bool = False,
     ):
-        super().__init__(projectile_surface(friendly), position)
+        super().__init__(projectile_surface(friendly, boss_shot), position)
         if velocity is None:
             velocity = (640.0, 0.0) if friendly else (-330.0, 0.0)
         self.velocity = pygame.Vector2(velocity)

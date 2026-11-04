@@ -21,10 +21,11 @@ from game.config import (
     VIOLET,
     WIDTH,
 )
+from game.difficulty import DIFFICULTIES, DifficultyProfile, get_difficulty
 from game.entities import Boss, Enemy, Player, PowerUp, Projectile
 from game.storage import SaveSystem
 from game.ui import Button, draw_panel, draw_text
-from game.visuals import StarField, build_background, ship_surface
+from game.visuals import StarField, build_background, heart_surface, ship_surface
 
 
 class MenuScene:
@@ -146,6 +147,104 @@ class MenuScene:
         )
 
 
+class DifficultyScene:
+    """Let the player choose a mode before starting a fresh run."""
+
+    def __init__(self, screen: pygame.Surface, audio: ProceduralAudio):
+        self.screen = screen
+        self.audio = audio
+        self.clock = pygame.time.Clock()
+        self.background = build_background()
+        self.stars = StarField(seed=64)
+        self.title_font = pygame.font.SysFont("bahnschrift", 46, bold=True)
+        self.button_font = pygame.font.SysFont("bahnschrift", 24, bold=True)
+        self.body_font = pygame.font.SysFont("bahnschrift", 19)
+        self.selected_index = 1
+        self.profiles = list(DIFFICULTIES.values())
+        self.buttons = [
+            Button(
+                profile.label,
+                pygame.Rect(WIDTH // 2 - 210, 156 + index * 96, 420, 52),
+                profile.key,
+            )
+            for index, profile in enumerate(self.profiles)
+        ]
+
+    def run(self) -> str:
+        while True:
+            dt = self.clock.tick(FPS) / 1_000
+            self.stars.update(dt)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return "quit"
+                if event.type == pygame.KEYDOWN:
+                    action = self._keyboard_action(event.key)
+                    if action:
+                        return action
+                for index, button in enumerate(self.buttons):
+                    if button.accepts(event):
+                        self.selected_index = index
+                        self.audio.play("powerup")
+                        return button.action
+            self.draw()
+            pygame.display.flip()
+
+    def _keyboard_action(self, key: int) -> str | None:
+        if key in (pygame.K_UP, pygame.K_w):
+            self.selected_index = (self.selected_index - 1) % len(self.buttons)
+        elif key in (pygame.K_DOWN, pygame.K_s):
+            self.selected_index = (self.selected_index + 1) % len(self.buttons)
+        elif key in (pygame.K_RETURN, pygame.K_SPACE):
+            self.audio.play("powerup")
+            return self.buttons[self.selected_index].action
+        elif key == pygame.K_ESCAPE:
+            return "menu"
+        return None
+
+    def draw(self) -> None:
+        self.screen.blit(self.background, (0, 0))
+        self.stars.draw(self.screen)
+        draw_panel(self.screen, pygame.Rect(135, 28, WIDTH - 270, HEIGHT - 56))
+        draw_text(
+            self.screen,
+            "ESCOLHA A DIFICULDADE",
+            self.title_font,
+            INK,
+            center=(WIDTH // 2, 78),
+        )
+        draw_text(
+            self.screen,
+            "Cada modo altera naves, velocidade, rajadas e o boss.",
+            self.body_font,
+            MUTED,
+            center=(WIDTH // 2, 124),
+        )
+
+        mouse = pygame.mouse.get_pos()
+        for index, (button, profile) in enumerate(zip(self.buttons, self.profiles)):
+            button.draw(
+                self.screen,
+                self.button_font,
+                mouse,
+                selected=index == self.selected_index,
+            )
+            draw_text(
+                self.screen,
+                profile.description,
+                self.body_font,
+                profile.color if index == self.selected_index else MUTED,
+                center=(WIDTH // 2, button.rect.bottom + 18),
+            )
+
+        draw_text(
+            self.screen,
+            "ESC volta • Enter confirma",
+            self.body_font,
+            MUTED,
+            center=(WIDTH // 2, 488),
+        )
+
+
 class InstructionsScene:
     def __init__(self, screen: pygame.Surface, background: pygame.Surface, stars: StarField):
         self.screen = screen
@@ -180,12 +279,13 @@ class InstructionsScene:
             ("Mover", "Setas ou WASD"),
             ("Atirar", "Barra de espaço"),
             ("Pausar", "ESC salva o progresso e volta ao menu"),
+            ("Modo", "Escolha Fácil, Normal ou Difícil"),
             ("Power-up azul", "Aumenta a velocidade e a cadência de tiro"),
             ("Power-up verde", "Bloqueia o próximo dano recebido"),
             ("Objetivo", "Sobreviva por 30 segundos e derrote o boss"),
         ]
         for index, (label, description) in enumerate(lines):
-            y = 125 + index * 55
+            y = 118 + index * 49
             draw_text(self.screen, label, self.body_font, CYAN, topleft=(145, y))
             draw_text(self.screen, description, self.body_font, INK, topleft=(330, y))
         draw_text(
@@ -340,8 +440,9 @@ class GameScene:
         self,
         screen: pygame.Surface,
         audio: ProceduralAudio,
-        progress: dict[str, int] | None = None,
+        progress: dict[str, int | str] | None = None,
         seed: int | None = None,
+        difficulty: str = "normal",
     ):
         self.screen = screen
         self.audio = audio
@@ -349,6 +450,8 @@ class GameScene:
         self.background = build_background()
         self.stars = StarField(seed=91)
         self.rng = random.Random(seed)
+        selected_difficulty = progress.get("difficulty", difficulty) if progress else difficulty
+        self.difficulty: DifficultyProfile = get_difficulty(selected_difficulty)
         self.status: str | None = None
         self.score = int(progress.get("score", 0)) if progress else 0
         lives = int(progress.get("lives", 3)) if progress else 3
@@ -365,7 +468,10 @@ class GameScene:
         self.next_powerup_at = self.session_started_at + 11_000
         self.boss_music_started = False
         self.hud_font = pygame.font.SysFont("consolas", 23, bold=True)
+        self.hud_small_font = pygame.font.SysFont("bahnschrift", 15, bold=True)
         self.banner_font = pygame.font.SysFont("bahnschrift", 34, bold=True)
+        self.hud_overlay = pygame.Surface((WIDTH, 74), pygame.SRCALPHA)
+        self.hud_overlay.fill((3, 10, 29, 178))
 
     def run(self) -> dict[str, int | float | str]:
         self.audio.switch_music(False)
@@ -387,16 +493,23 @@ class GameScene:
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 self.status = "menu"
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-                if self.player.can_shoot(now_ms):
-                    self.player_shots.append(
-                        Projectile((self.player.rect.right - 4, self.player.rect.centery - 4), True)
-                    )
-                    self.audio.play("shoot")
+                self._fire_player(now_ms)
+
+    def _fire_player(self, now_ms: int) -> None:
+        if len(self.player_shots) >= 24 or not self.player.can_shoot(now_ms):
+            return
+        self.player_shots.append(
+            Projectile((self.player.rect.right - 4, self.player.rect.centery - 6), True)
+        )
+        self.audio.play("shoot")
 
     def update(self, dt: float, now_ms: int) -> None:
         self.elapsed_seconds = self.elapsed_offset + (now_ms - self.session_started_at) / 1_000
         self.stars.update(dt)
-        self.player.update(pygame.key.get_pressed(), dt, now_ms)
+        keys = pygame.key.get_pressed()
+        self.player.update(keys, dt, now_ms)
+        if keys[pygame.K_SPACE]:
+            self._fire_player(now_ms)
 
         if self.elapsed_seconds * 1_000 >= BOSS_DELAY_MS:
             self._ensure_boss(now_ms)
@@ -405,26 +518,43 @@ class GameScene:
 
         for enemy in self.enemies:
             enemy.update(dt, self.elapsed_seconds)
-            if enemy.ready_to_shoot(now_ms):
-                self.enemy_shots.append(
-                    Projectile((enemy.rect.left - 8, enemy.rect.centery - 4), False)
-                )
+            if (
+                enemy.ready_to_shoot(now_ms)
+                and len(self.enemy_shots) < self.difficulty.max_enemy_projectiles
+            ):
+                for vertical_speed in self.difficulty.enemy_shot_vertical_speeds:
+                    if len(self.enemy_shots) >= self.difficulty.max_enemy_projectiles:
+                        break
+                    self.enemy_shots.append(
+                        Projectile(
+                            (enemy.rect.left - 8, enemy.rect.centery - 4),
+                            False,
+                            velocity=(-self.difficulty.enemy_projectile_speed, vertical_speed),
+                        )
+                    )
         self.enemies = [enemy for enemy in self.enemies if not enemy.off_screen]
 
         if self.boss is not None:
             self.boss.update(dt)
-            if self.boss.ready_to_shoot(now_ms):
-                for vertical_speed in (-145.0, 0.0, 145.0):
+            if (
+                self.boss.ready_to_shoot(now_ms)
+                and len(self.enemy_shots) < self.difficulty.max_enemy_projectiles
+            ):
+                for vertical_speed in self.difficulty.boss_shot_vertical_speeds:
+                    if len(self.enemy_shots) >= self.difficulty.max_enemy_projectiles:
+                        break
                     self.enemy_shots.append(
                         Projectile(
                             (self.boss.rect.left - 8, self.boss.rect.centery - 4),
                             False,
-                            velocity=(-380.0, vertical_speed),
+                            velocity=(-self.difficulty.boss_projectile_speed, vertical_speed),
                             boss_shot=True,
                         )
                     )
 
-        for projectile in [*self.player_shots, *self.enemy_shots]:
+        for projectile in self.player_shots:
+            projectile.update(dt)
+        for projectile in self.enemy_shots:
             projectile.update(dt)
         self.player_shots = [shot for shot in self.player_shots if not shot.off_screen]
         self.enemy_shots = [shot for shot in self.enemy_shots if not shot.off_screen]
@@ -447,16 +577,37 @@ class GameScene:
             self.status = "defeated"
 
     def _spawn_enemies(self, now_ms: int) -> None:
-        desired_count = min(7, 2 + int(self.elapsed_seconds // 12))
+        desired_count = min(
+            self.difficulty.max_enemy_count,
+            self.difficulty.base_enemy_count
+            + int(self.elapsed_seconds // self.difficulty.enemy_growth_seconds),
+        )
         if len(self.enemies) >= desired_count or now_ms < self.next_enemy_spawn_at:
             return
-        kind = "striker" if self.elapsed_seconds >= 12 and self.rng.random() < 0.34 else "scout"
-        self.enemies.append(Enemy(kind, self.rng))
-        self.next_enemy_spawn_at = now_ms + 360
+        kind = (
+            "striker"
+            if self.elapsed_seconds >= self.difficulty.striker_unlock_seconds
+            and self.rng.random() < self.difficulty.striker_chance
+            else "scout"
+        )
+        self.enemies.append(
+            Enemy(
+                kind,
+                self.rng,
+                speed_multiplier=self.difficulty.enemy_speed_multiplier,
+                shot_interval_multiplier=self.difficulty.enemy_shot_interval_multiplier,
+                progression_seconds=self.difficulty.enemy_progression_seconds,
+            )
+        )
+        self.next_enemy_spawn_at = now_ms + self.difficulty.spawn_delay_ms
 
     def _ensure_boss(self, now_ms: int) -> None:
         if self.boss is None:
-            self.boss = Boss()
+            self.boss = Boss(
+                max_hp=self.difficulty.boss_hp,
+                vertical_speed=self.difficulty.boss_speed,
+                shot_interval_ms=self.difficulty.boss_shot_interval_ms,
+            )
             self.enemies.clear()
             self.enemy_shots.clear()
             self.boss.last_shot_at = now_ms
@@ -516,10 +667,15 @@ class GameScene:
         self._draw_hud()
 
     def _draw_hud(self) -> None:
-        overlay = pygame.Surface((WIDTH, 74), pygame.SRCALPHA)
-        overlay.fill((3, 10, 29, 178))
-        self.screen.blit(overlay, (0, 0))
+        self.screen.blit(self.hud_overlay, (0, 0))
         draw_text(self.screen, f"PONTOS {self.score:05d}", self.hud_font, INK, topleft=(22, 22))
+        draw_text(
+            self.screen,
+            f"MODO {self.difficulty.label}",
+            self.hud_small_font,
+            self.difficulty.color,
+            topleft=(23, 49),
+        )
         draw_text(
             self.screen,
             f"TEMPO {self.elapsed_seconds:05.1f}s",
@@ -528,16 +684,13 @@ class GameScene:
             center=(WIDTH // 2, 34),
         )
         for index in range(3):
-            color = RED if index < self.player.lives else (69, 78, 98)
-            x = WIDTH - 122 + index * 34
-            pygame.draw.circle(self.screen, color, (x - 5, 28), 7)
-            pygame.draw.circle(self.screen, color, (x + 5, 28), 7)
-            pygame.draw.polygon(self.screen, color, [(x - 12, 31), (x + 12, 31), (x, 46)])
+            heart = heart_surface(index < self.player.lives)
+            self.screen.blit(heart, (WIDTH - 118 + index * 34, 20))
 
         if self.boss is not None:
             bar = pygame.Rect(WIDTH // 2 - 190, 82, 380, 16)
             pygame.draw.rect(self.screen, (45, 31, 62), bar, border_radius=8)
-            health_width = int(bar.width * self.boss.hp / self.boss.MAX_HP)
+            health_width = int(bar.width * self.boss.hp / self.boss.max_hp)
             pygame.draw.rect(
                 self.screen,
                 MAGENTA,
@@ -566,10 +719,26 @@ class GameScene:
             "score": self.score,
             "lives": self.player.lives,
             "elapsed_seconds": round(self.elapsed_seconds, 2),
+            "difficulty": self.difficulty.key,
         }
 
     def prepare_preview(self, boss: bool = False) -> None:
-        self.enemies = [Enemy("scout", self.rng), Enemy("striker", self.rng)]
+        self.enemies = [
+            Enemy(
+                "scout",
+                self.rng,
+                speed_multiplier=self.difficulty.enemy_speed_multiplier,
+                shot_interval_multiplier=self.difficulty.enemy_shot_interval_multiplier,
+                progression_seconds=self.difficulty.enemy_progression_seconds,
+            ),
+            Enemy(
+                "striker",
+                self.rng,
+                speed_multiplier=self.difficulty.enemy_speed_multiplier,
+                shot_interval_multiplier=self.difficulty.enemy_shot_interval_multiplier,
+                progression_seconds=self.difficulty.enemy_progression_seconds,
+            ),
+        ]
         positions = ((705, 218), (825, 385))
         for enemy, position in zip(self.enemies, positions):
             enemy.position.update(position)
@@ -584,8 +753,12 @@ class GameScene:
         if boss:
             self.enemies.clear()
             self.powerup = None
-            self.boss = Boss()
-            self.boss.hp = 23
+            self.boss = Boss(
+                max_hp=self.difficulty.boss_hp,
+                vertical_speed=self.difficulty.boss_speed,
+                shot_interval_ms=self.difficulty.boss_shot_interval_ms,
+            )
+            self.boss.hp = max(1, round(self.boss.max_hp * 0.64))
             self.enemy_shots = [
                 Projectile((760, 300), False, velocity=(-380, -90), boss_shot=True),
                 Projectile((710, 360), False, velocity=(-380, 90), boss_shot=True),

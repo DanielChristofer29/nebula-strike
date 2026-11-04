@@ -1,10 +1,12 @@
 # Nebula Strike
 
-Um shoot 'em up arcade feito em Python e Pygame. Pilote uma nave, enfrente dois tipos de inimigo, colete melhorias e sobreviva por 30 segundos para encarar o boss.
+Um shoot 'em up arcade feito em Python e Pygame. Pilote uma nave, escolha entre três dificuldades, enfrente dois tipos de inimigo, colete melhorias e sobreviva por 30 segundos para encarar o boss.
 
 O projeto é uma reescrita limpa de um trabalho acadêmico anterior. Os gráficos são desenhados em tempo de execução e os efeitos sonoros são sintetizados pelo próprio código: nenhum arquivo de imagem, música ou efeito de origem externa é distribuído aqui.
 
 ![Menu principal](docs/screenshots/menu.png)
+
+![Seleção de dificuldade](docs/screenshots/difficulty.png)
 
 | Partida | Boss fight |
 | --- | --- |
@@ -14,13 +16,26 @@ O projeto é uma reescrita limpa de um trabalho acadêmico anterior. Os gráfico
 
 - arquitetura orientada a objetos, com entidades e cenas separadas;
 - menu, instruções, ranking, vitória e derrota;
-- dois tipos de inimigo com dificuldade progressiva;
+- modos **Fácil**, **Normal** e **Difícil**, cada um com progressão própria;
+- quantidade, velocidade e rajadas dos inimigos aumentam conforme o modo;
 - boss acionado após 30 segundos;
 - power-ups de escudo e turbo;
 - salvamento seguro de progresso e ranking em JSON;
 - colisões por retângulos e invulnerabilidade temporária após dano;
-- gráficos e áudio procedurais, sem assets externos;
+- naves, tiros e corações redesenhados com gráficos procedurais;
+- novo som de laser sintetizado em camadas, sem assets externos;
+- superfícies visuais em cache e limite seguro de projéteis para manter o FPS estável;
 - testes automatizados para entidades, persistência e cenas.
+
+## Modos de dificuldade
+
+| Modo | Inimigos simultâneos | Tiros | Boss |
+| --- | ---: | --- | --- |
+| Fácil | até 4 | mais lentos e espaçados | 24 de vida, rajada simples |
+| Normal | até 7 | velocidade equilibrada | 36 de vida, rajada tripla |
+| Difícil | até 10 | rápidos e em rajadas duplas | 48 de vida, rajada quíntupla |
+
+Em todos os modos a pressão aumenta ao longo da partida. A dificuldade escolhida também fica registrada ao salvar e continuar o jogo.
 
 ## Como executar
 
@@ -51,7 +66,7 @@ python main.py
 | Ação | Teclas |
 | --- | --- |
 | Mover | Setas ou WASD |
-| Atirar | Barra de espaço |
+| Atirar | Barra de espaço — pode segurar |
 | Confirmar no menu | Enter ou espaço |
 | Voltar e salvar durante a partida | Esc |
 

@@ -8,7 +8,7 @@ import pygame
 
 from game.audio import ProceduralAudio
 from game.config import HEIGHT, TITLE, WIDTH
-from game.scenes import GameOverScene, GameScene, MenuScene, RankingScene
+from game.scenes import DifficultyScene, GameOverScene, GameScene, MenuScene, RankingScene
 from game.storage import SaveSystem
 
 
@@ -37,22 +37,34 @@ class GameApp:
                     continue
 
                 if action == "new_game":
+                    difficulty = DifficultyScene(self.screen, self.audio).run()
+                    if difficulty == "quit":
+                        break
+                    if difficulty == "menu":
+                        continue
                     self.saves.clear_progress()
                     progress = None
                 elif action == "continue_game":
                     progress = self.saves.load_progress()
                     if progress is None:
                         continue
+                    difficulty = str(progress.get("difficulty", "normal"))
                 else:
                     continue
 
-                result = GameScene(self.screen, self.audio, progress).run()
+                result = GameScene(
+                    self.screen,
+                    self.audio,
+                    progress,
+                    difficulty=difficulty,
+                ).run()
                 status = str(result["status"])
                 if status in {"menu", "quit"}:
                     self.saves.save_progress(
                         int(result["score"]),
                         int(result["lives"]),
                         int(float(result["elapsed_seconds"])),
+                        str(result["difficulty"]),
                     )
                     running = status != "quit"
                     continue
@@ -79,6 +91,12 @@ class GameApp:
         menu_path = output_directory / "menu.png"
         pygame.image.save(self.screen, menu_path)
         paths.append(menu_path)
+
+        difficulty = DifficultyScene(self.screen, self.audio)
+        difficulty.draw()
+        difficulty_path = output_directory / "difficulty.png"
+        pygame.image.save(self.screen, difficulty_path)
+        paths.append(difficulty_path)
 
         gameplay = GameScene(self.screen, self.audio, seed=29)
         gameplay.prepare_preview(boss=False)

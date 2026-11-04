@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from game.config import DATA_DIR, RANKING_LIMIT, RANKING_PATH
+from game.difficulty import normalize_difficulty
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,7 +96,7 @@ class SaveSystem:
         self.ranking = RankingStore(self.directory / RANKING_PATH.name)
         self.progress_path = self.directory / "progress.json"
 
-    def load_progress(self) -> dict[str, int] | None:
+    def load_progress(self) -> dict[str, int | str] | None:
         try:
             raw = json.loads(self.progress_path.read_text(encoding="utf-8"))
             if not isinstance(raw, dict):
@@ -104,6 +105,7 @@ class SaveSystem:
                 "score": max(0, int(raw["score"])),
                 "lives": min(3, max(0, int(raw["lives"]))),
                 "elapsed_seconds": max(0, int(raw["elapsed_seconds"])),
+                "difficulty": normalize_difficulty(raw.get("difficulty", "normal")),
             }
         except (
             OSError,
@@ -115,11 +117,18 @@ class SaveSystem:
         ):
             return None
 
-    def save_progress(self, score: int, lives: int, elapsed_seconds: int) -> None:
+    def save_progress(
+        self,
+        score: int,
+        lives: int,
+        elapsed_seconds: int,
+        difficulty: str = "normal",
+    ) -> None:
         payload = {
             "score": max(0, int(score)),
             "lives": min(3, max(0, int(lives))),
             "elapsed_seconds": max(0, int(elapsed_seconds)),
+            "difficulty": normalize_difficulty(difficulty),
         }
         self.directory.mkdir(parents=True, exist_ok=True)
         temporary_path = self.progress_path.with_suffix(".json.tmp")
